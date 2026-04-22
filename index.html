@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>QuantaPort — AI Portfolio Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── DESIGN TOKENS ────────────────────────────────── */
+  :root {
+    --bg:        #050810;
+    --surface:   #0c1220;
+    --panel:     #111827;
+    --border:    #1e2d45;
+    --accent:    #00e5ff;
+    --accent2:   #7c3aed;
+    --accent3:   #10b981;
+    --warn:      #f59e0b;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --danger:    #ef4444;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --font-body: 'DM Sans', sans-serif;
+    --r:         10px;
+    --r-lg:      16px;
+    --glow:      0 0 20px rgba(0,229,255,.18);
+    --glow2:     0 0 30px rgba(124,58,237,.22);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-size: 14px;
+  }
+
+  /* ── NOISE OVERLAY ────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: .5;
+  }
+
+  /* ── GRID BACKGROUND ──────────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(0,229,255,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ── HEADER ───────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(5,8,16,.85);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-head);
+    font-size: 20px; font-weight: 800; letter-spacing: -.5px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    box-shadow: var(--glow);
+  }
+  .logo span { color: var(--accent); }
+
+  .status-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent3);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── MAIN LAYOUT ──────────────────────────────────── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 28px 28px 40px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── PANEL BASE ───────────────────────────────────── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-header h2 {
+    font-family: var(--font-head);
+    font-size: 13px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted);
+  }
+  .panel-header .icon { font-size: 15px; }
+  .panel-body { padding: 20px; }
+
+  /* ── FORM ─────────────────────────────────────────── */
+  .form-sidebar {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 7px; }
+
+  label {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  .ticker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .ticker-btn {
+    padding: 8px 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: center;
+  }
+  .ticker-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ticker-btn.active {
+    background: rgba(0,229,255,.08);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 12px rgba(0,229,255,.15);
+  }
+
+  input[type="number"], select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    width: 100%;
+    transition: border-color .2s;
+    outline: none;
+    appearance: none;
+  }
+  input[type="number"]:focus, select:focus { border-color: var(--accent); box-shadow: var(--glow); }
+
+  .slider-wrapper { display: flex; flex-direction: column; gap: 8px; }
+  .slider-labels { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+  .slider-val {
+    text-align: right;
+    font-family: var(--font-mono); font-size: 13px; color: var(--accent);
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%; height: 4px;
+    background: var(--border);
+    border-radius: 2px; outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(0,229,255,.5);
+    transition: transform .15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+  .method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .method-card {
+    padding: 12px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    cursor: pointer;
+    text-align: center;
+    transition: all .15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .method-card input { display: none; }
+  .method-card .m-label {
+    font-family: var(--font-head); font-size: 12px; font-weight: 700;
+    display: block; margin-bottom: 3px;
+  }
+  .method-card .m-sub {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  }
+  .method-card:has(input:checked) {
+    border-color: var(--accent2);
+    background: rgba(124,58,237,.12);
+    box-shadow: var(--glow2);
+  }
+  .method-card:has(input:checked) .m-label { color: #a78bfa; }
+
+  .btn-run {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none; border-radius: var(--r);
+    color: #fff;
+    font-family: var(--font-head); font-size: 14px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s;
+    box-shadow: 0 4px 20px rgba(124,58,237,.4);
+    position: relative; overflow: hidden;
+  }
+  .btn-run:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(124,58,237,.55); }
+  .btn-run:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+  .btn-run::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+    transform: translateX(-100%);
+    transition: transform .5s;
+  }
+  .btn-run:hover::after { transform: translateX(100%); }
+
+  /* ── RIGHT SIDE ───────────────────────────────────── */
+  .results-area {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  /* ── STAT CARDS ───────────────────────────────────── */
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    position: relative; overflow: hidden;
+    transition: border-color .2s;
+  }
+  .stat-card::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+  .stat-card:nth-child(1)::before { background: var(--accent); }
+  .stat-card:nth-child(2)::before { background: var(--accent2); }
+  .stat-card:nth-child(3)::before { background: var(--accent3); }
+  .stat-card:nth-child(4)::before { background: var(--warn); }
+
+  .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .stat-value { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+  .stat-unit { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .stat-card .placeholder { width: 70%; height: 28px; background: var(--border); border-radius: 4px; opacity: .4; }
+
+  /* ── CHART PANELS ─────────────────────────────────── */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 260px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── ALLOCATION TABLE ─────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--border); }
+  th {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 10px 14px; text-align: left; font-weight: 500;
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(30,45,69,.5); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(0,229,255,.03); }
+
+  .ticker-tag {
+    font-family: var(--font-mono); font-weight: 500; font-size: 13px;
+    color: var(--accent);
+  }
+  .bar-cell { min-width: 120px; }
+  .bar-bg { background: var(--surface); border-radius: 2px; height: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .6s ease; }
+
+  /* ── FORECAST TABLE ───────────────────────────────── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px; font-family: var(--font-mono); font-size: 11px;
+  }
+  .badge-pos { background: rgba(16,185,129,.12); color: var(--accent3); border: 1px solid rgba(16,185,129,.25); }
+  .badge-neg { background: rgba(239,68,68,.12); color: var(--danger); border: 1px solid rgba(239,68,68,.25); }
+
+  /* ── LOADING OVERLAY ──────────────────────────────── */
+  #loading {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(5,8,16,.85);
+    backdrop-filter: blur(6px);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px;
+  }
+  #loading.show { display: flex; }
+
+  .loader-ring {
+    width: 64px; height: 64px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-right-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loader-label {
+    font-family: var(--font-mono); font-size: 13px; color: var(--muted);
+    letter-spacing: 1px; text-align: center;
+  }
+  .loader-step {
+    font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+    opacity: 0; animation: fadeStep 12s steps(1) infinite;
+  }
+
+  @keyframes fadeStep {
+    0%  { opacity:1; content: "Fetching live market data..."; }
+    25% { opacity:1; }
+    26% { opacity:0; }
+    33% { opacity:1; }
+  }
+
+  /* ── ERROR TOAST ──────────────────────────────────── */
+  #error-toast {
+    display: none;
+    position: fixed; bottom: 28px; right: 28px; z-index: 300;
+    background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4);
+    color: var(--danger);
+    padding: 14px 20px; border-radius: var(--r);
+    font-family: var(--font-mono); font-size: 12px;
+    max-width: 360px;
+    backdrop-filter: blur(8px);
+    animation: slideIn .3s ease;
+  }
+  #error-toast.show { display: block; }
+  @keyframes slideIn { from { transform: translateY(10px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+
+  /* ── EMPTY STATE ──────────────────────────────────── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 20px;
+    color: var(--muted); text-align: center; gap: 12px;
+  }
+  .empty-icon { font-size: 36px; opacity: .4; }
+  .empty-text { font-family: var(--font-mono); font-size: 12px; }
+
+  /* ── CONFIG NOTICE ────────────────────────────────── */
+  .config-banner {
+    background: rgba(245,158,11,.06);
+    border: 1px solid rgba(245,158,11,.25);
+    border-radius: var(--r);
+    padding: 10px 14px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--warn);
+    line-height: 1.6;
+  }
+  .config-banner code {
+    background: rgba(245,158,11,.1); padding: 1px 5px; border-radius: 3px;
+  }
+
+  /* ── RESPONSIVE ───────────────────────────────────── */
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .form-sidebar { grid-column: 1; grid-row: 1; }
+    .results-area { grid-column: 1; grid-row: 2; }
+    .stat-cards { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (max-width: 640px) {
+    main { padding: 16px; }
+    .charts-row { grid-template-columns: 1fr; }
+    .stat-cards { grid-template-columns: 1fr 1fr; }
+    header { padding: 14px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚛</div>
+      Quanta<span>Port</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">AI-Driven · Cloud-Native · Quantum-Enhanced</span>
+      <div class="status-badge"><div class="status-dot"></div> Azure Functions</div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- ── SIDEBAR: FORM ── -->
+    <aside class="form-sidebar">
+
+      ]
+      <!-- Tickers -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="icon">📊</span>
+          <h2>Select Tickers</h2>
+        </div>
+        <div class="panel-body">
+          <div class="ticker-grid" id="ticker-grid">
+            <!-- populated by JS -->
+          </div>
+          <p style="margin-top:10px;font-family:var(--font-mono);font-size:10px;color:var(--muted);">
+            <span id="ticker-count">6</span> selected · defaults to all 6 if none chosen
+          </p>
+        </div>
+      </div>
+
+      <!-- Parameters -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="icon">🎛</span>
+          <h2>Parameters</h2>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:16px;">
+
+          <div class="field">
+            <label>Investment Amount (USD)</label>
+            <input type="number" id="investment" value="100000" min="1000" step="1000"/>
+          </div>
+
+          <div class="field">
+            <label>Risk Aversion — <span class="slider-val" id="ra-val">0.50</span></label>
+            <div class="slider-wrapper">
+              <input type="range" id="risk-aversion" min="0" max="1" step="0.01" value="0.5"/>
+              <div class="slider-labels"><span>Growth</span><span>Balanced</span><span>Conservative</span></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Solver Method</label>
+            <div class="method-grid">
+              <label class="method-card">
+                <input type="radio" name="method" value="quantum_inspired" checked/>
+                <span class="m-label">⚛ Quantum</span>
+                <span class="m-sub">Sim. Annealing</span>
+              </label>
+              <label class="method-card">
+                <input type="radio" name="method" value="classical"/>
+                <span class="m-label">📐 Classical</span>
+                <span class="m-sub">SLSQP / Markowitz</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Run button -->
+      <button class="btn-run" id="run-btn" onclick="runPipeline()">
+        ▶ Run Pipeline
+      </button>
+
+      <!-- Last run info -->
+      <div id="run-meta" style="display:none;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:center;"></div>
+
+    </aside>
+
+    <!-- ── RESULTS AREA ── -->
+    <section class="results-area">
+
+      <!-- STAT CARDS -->
+      <div class="stat-cards" id="stat-cards">
+        <div class="stat-card"><div class="stat-label">Portfolio Return</div><div class="placeholder"></div></div>
+        <div class="stat-card"><div class="stat-label">Volatility</div><div class="placeholder"></div></div>
+        <div class="stat-card"><div class="stat-label">Sharpe Ratio</div><div class="placeholder"></div></div>
+        <div class="stat-card"><div class="stat-label">Allocated Capital</div><div class="placeholder"></div></div>
+      </div>
+
+      <!-- CHARTS ROW -->
+      <div class="charts-row">
+        <div class="panel">
+          <div class="panel-header"><span class="icon">🥧</span><h2>Allocation Weights</h2></div>
+          <div class="panel-body">
+            <div class="chart-wrap">
+              <div class="empty-state" id="pie-empty"><div class="empty-icon">📉</div><div class="empty-text">Run pipeline to see allocation</div></div>
+              <canvas id="pie-chart" style="display:none;"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="icon">📈</span><h2>Expected Return vs Volatility</h2></div>
+          <div class="panel-body">
+            <div class="chart-wrap">
+              <div class="empty-state" id="scatter-empty"><div class="empty-icon">📉</div><div class="empty-text">Run pipeline to see risk/return</div></div>
+              <canvas id="scatter-chart" style="display:none;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ALLOCATION TABLE -->
+      <div class="panel">
+        <div class="panel-header"><span class="icon">💼</span><h2>Portfolio Allocation</h2></div>
+        <div id="alloc-table-wrap">
+          <div class="empty-state"><div class="empty-icon">🏦</div><div class="empty-text">Allocation breakdown will appear here</div></div>
+        </div>
+      </div>
+
+      <!-- FORECAST TABLE -->
+      <div class="panel">
+        <div class="panel-header"><span class="icon">🔮</span><h2>ARIMAX / GARCH Forecasts</h2></div>
+        <div id="forecast-table-wrap">
+          <div class="empty-state"><div class="empty-icon">🔮</div><div class="empty-text">Forecast signals will appear here</div></div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-label">Pipeline Running</div>
+  <div id="loader-step-text" style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:-4px;">Initializing...</div>
+</div>
+
+<!-- ERROR TOAST -->
+<div id="error-toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   CONFIG — update these before deploying
+═══════════════════════════════════════════════════ */
+const API_ENDPOINT = "/api/run_full_pipeline";
+
+/* ═══════════════════════════════════════════════════
+   TICKER STATE
+═══════════════════════════════════════════════════ */
+const ALL_TICKERS = ['AAPL','MSFT','AMZN','GOOGL','META','TSLA'];
+let selectedTickers = new Set(ALL_TICKERS);
+
+// Build ticker buttons
+const grid = document.getElementById('ticker-grid');
+ALL_TICKERS.forEach(t => {
+  const btn = document.createElement('button');
+  btn.className = 'ticker-btn active';
+  btn.textContent = t;
+  btn.dataset.ticker = t;
+  btn.onclick = () => toggleTicker(t, btn);
+  grid.appendChild(btn);
+});
+
+function toggleTicker(t, btn) {
+  if (selectedTickers.has(t)) {
+    if (selectedTickers.size === 1) return; // keep at least 1
+    selectedTickers.delete(t);
+    btn.classList.remove('active');
+  } else {
+    selectedTickers.add(t);
+    btn.classList.add('active');
+  }
+  document.getElementById('ticker-count').textContent = selectedTickers.size;
+}
+
+// Slider
+const raSlider = document.getElementById('risk-aversion');
+const raVal = document.getElementById('ra-val');
+raSlider.addEventListener('input', () => { raVal.textContent = parseFloat(raSlider.value).toFixed(2); });
+
+/* ═══════════════════════════════════════════════════
+   CHART INSTANCES
+═══════════════════════════════════════════════════ */
+let pieChart = null;
+let scatterChart = null;
+
+const PALETTE = ['#00e5ff','#7c3aed','#10b981','#f59e0b','#f43f5e','#a78bfa'];
+
+/* ═══════════════════════════════════════════════════
+   LOADING STEPPER
+═══════════════════════════════════════════════════ */
+const STEPS = [
+  "Fetching live market data via yfinance...",
+  "Engineering features — rolling stats, market/VIX signals...",
+  "Running ARIMAX grid search (p,d,q combinations)...",
+  "Fitting GARCH(1,1) volatility models...",
+  "Executing walk-forward validation...",
+  "Running quantum-inspired simulated annealing...",
+  "Structuring allocation payload..."
+];
+let stepTimer = null;
+
+function startStepper() {
+  let i = 0;
+  const el = document.getElementById('loader-step-text');
+  el.textContent = STEPS[0];
+  stepTimer = setInterval(() => {
+    i = (i + 1) % STEPS.length;
+    el.textContent = STEPS[i];
+  }, 8000);
+}
+function stopStepper() {
+  clearInterval(stepTimer);
+}
+
+/* ═══════════════════════════════════════════════════
+   MAIN PIPELINE CALL
+═══════════════════════════════════════════════════ */
+
+async function runPipeline() {
+  const method = document.querySelector('input[name="method"]:checked').value;
+  const investment = parseFloat(document.getElementById('investment').value);
+  const riskAversion = parseFloat(raSlider.value);
+  const tickers = [...selectedTickers];
+
+  showLoading(true);
+  document.getElementById('run-btn').disabled = true;
+
+  // No 'x-functions-key' needed because SWA and Functions are linked
+  const headers = { 'Content-Type': 'application/json' };
+
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 
+        tickers, 
+        investment_amount: investment, 
+        risk_aversion: riskAversion, 
+        method 
+      })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
+    }
+
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    renderResults(data, method, investment);
+    
+    document.getElementById('run-meta').style.display = 'block';
+    document.getElementById('run-meta').textContent =
+      `Last run: ${new Date().toLocaleTimeString()} · Method: ${method} · ${tickers.length} tickers`;
+
+  } catch (err) {
+    showError("Pipeline Error: " + err.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('run-btn').disabled = false;
+  }
+}
+/* ═══════════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════════ */
+function renderResults(data, method, investment) {
+  renderStats(data);
+  renderPieChart(data.optimal_weights);
+  renderScatterChart(data.forecast_inputs || []);
+  renderAllocTable(data.optimal_weights, data.allocated_amounts);
+  renderForecastTable(data.forecast_inputs || []);
+}
+
+function renderStats(data) {
+  const ret = (data.expected_portfolio_return * 100).toFixed(4);
+  const vol = (data.expected_portfolio_volatility * 100).toFixed(4);
+  const sharpe = data.sharpe_ratio.toFixed(3);
+  const allocated = Object.values(data.allocated_amounts || {}).reduce((a, b) => a + b, 0);
+
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Portfolio Return</div>
+      <div class="stat-value">${ret}<span class="stat-unit">%</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Volatility</div>
+      <div class="stat-value">${vol}<span class="stat-unit">%</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Sharpe Ratio</div>
+      <div class="stat-value">${sharpe}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Allocated Capital</div>
+      <div class="stat-value">$${(allocated/1000).toFixed(1)}<span class="stat-unit">K</span></div>
+    </div>
+  `;
+}
+
+function renderPieChart(weights) {
+  const labels = Object.keys(weights);
+  const values = Object.values(weights);
+
+  document.getElementById('pie-empty').style.display = 'none';
+  const canvas = document.getElementById('pie-chart');
+  canvas.style.display = 'block';
+
+  if (pieChart) pieChart.destroy();
+
+  pieChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: PALETTE.slice(0, labels.length),
+        borderColor: '#111827',
+        borderWidth: 3,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#94a3b8', font: { family: 'DM Mono', size: 11 }, padding: 12, boxWidth: 12 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${(ctx.parsed * 100).toFixed(1)}%`
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderScatterChart(forecasts) {
+  document.getElementById('scatter-empty').style.display = 'none';
+  const canvas = document.getElementById('scatter-chart');
+  canvas.style.display = 'block';
+
+  if (scatterChart) scatterChart.destroy();
+
+  const pts = forecasts.map((f, i) => ({
+    x: +(f.expected_volatility * 100).toFixed(4),
+    y: +(f.expected_return * 100).toFixed(4),
+    label: f.ticker,
+    color: PALETTE[i % PALETTE.length]
+  }));
+
+  scatterChart = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: pts.map(p => ({
+        label: p.label,
+        data: [{ x: p.x, y: p.y }],
+        backgroundColor: p.color,
+        pointRadius: 8, pointHoverRadius: 11,
+        borderColor: p.color + '55', borderWidth: 1
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#94a3b8', font: { family: 'DM Mono', size: 11 }, boxWidth: 10, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ret=${ctx.parsed.y.toFixed(4)}% vol=${ctx.parsed.x.toFixed(4)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Volatility (%)', color: '#64748b', font: { family: 'DM Mono', size: 10 } },
+          grid: { color: '#1e2d45' }, ticks: { color: '#64748b', font: { family: 'DM Mono', size: 10 } }
+        },
+        y: {
+          title: { display: true, text: 'Expected Return (%)', color: '#64748b', font: { family: 'DM Mono', size: 10 } },
+          grid: { color: '#1e2d45' }, ticks: { color: '#64748b', font: { family: 'DM Mono', size: 10 } }
+        }
+      }
+    }
+  });
+}
+
+function renderAllocTable(weights, amounts) {
+  const tickers = Object.keys(weights);
+  const maxW = Math.max(...Object.values(weights));
+
+  const rows = tickers.map(t => {
+    const w = weights[t];
+    const a = amounts[t];
+    const pct = (w * 100).toFixed(2);
+    const barW = maxW > 0 ? ((w / maxW) * 100).toFixed(1) : 0;
+    return `
+      <tr>
+        <td><span class="ticker-tag">${t}</span></td>
+        <td style="font-family:var(--font-mono);font-size:13px;">${pct}%</td>
+        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill" style="width:${barW}%"></div></div></td>
+        <td style="font-family:var(--font-mono);font-size:13px;text-align:right;">$${a.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('alloc-table-wrap').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Weight</th><th>Bar</th><th style="text-align:right">Allocated</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderForecastTable(forecasts) {
+  if (!forecasts.length) {
+    document.getElementById('forecast-table-wrap').innerHTML =
+      '<div class="empty-state"><div class="empty-text">No forecast data returned</div></div>';
+    return;
+  }
+
+  const rows = forecasts.map(f => {
+    const ret = (f.expected_return * 100).toFixed(5);
+    const vol = (f.expected_volatility * 100).toFixed(5);
+    const ras = f.risk_adjusted_score ? f.risk_adjusted_score.toFixed(4) : '—';
+    const isPos = f.expected_return >= 0;
+    return `
+      <tr>
+        <td><span class="ticker-tag">${f.ticker}</span></td>
+        <td><span class="badge ${isPos ? 'badge-pos' : 'badge-neg'}">${isPos ? '▲' : '▼'} ${ret}%</span></td>
+        <td style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">${vol}%</td>
+        <td style="font-family:var(--font-mono);font-size:12px;">${ras}</td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('forecast-table-wrap').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Exp. Return</th><th>Volatility</th><th>Risk-Adj. Score</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ═══════════════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════════════ */
+function showLoading(show) {
+  const el = document.getElementById('loading');
+  if (show) { el.classList.add('show'); startStepper(); }
+  else { el.classList.remove('show'); stopStepper(); }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-toast');
+  el.innerHTML = `⚠ ${msg}`;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 7000);
+}
+</script>
+</body>
+</html>
