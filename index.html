@@ -675,12 +675,15 @@ async function runPipeline() {
   document.getElementById('run-btn').disabled = true;
 
   // No 'x-functions-key' needed because SWA and Functions are linked
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 
+    'Content-Type': 'application/json',
+    'x-functions-key': 'Pb0E6goJldCFbQ_qrKbTcmNcUEz7I3-WaqG_MnTrTGmuAzFuhsDfzA==' // Replace with your actual key
+  };
 
   try {
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
-      headers,
+      headers, // Use the new headers object
       body: JSON.stringify({ 
         tickers, 
         investment_amount: investment, 
@@ -688,6 +691,7 @@ async function runPipeline() {
         method 
       })
     });
+    //
 
     if (!res.ok) {
       const txt = await res.text();
