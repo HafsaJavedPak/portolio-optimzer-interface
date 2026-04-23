@@ -674,40 +674,35 @@ async function runPipeline() {
   showLoading(true);
   document.getElementById('run-btn').disabled = true;
 
+  // No 'x-functions-key' needed because SWA and Functions are linked
+  const headers = { 'Content-Type': 'application/json' };
+
   try {
-    // STEP 1: Start the job
-    const startRes = await fetch(API_ENDPOINT, {
+    const res = await fetch(API_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tickers, investment_amount: investment, risk_aversion: riskAversion, method })
+      headers,
+      body: JSON.stringify({ 
+        tickers, 
+        investment_amount: investment, 
+        risk_aversion: riskAversion, 
+        method 
+      })
     });
 
-    if (!startRes.ok) throw new Error("Failed to start pipeline.");
-
-    const statusLinks = await startRes.json();
-    const pollUrl = statusLinks.statusQueryGetUri; // Provided by Durable Functions
-
-    // STEP 2: Poll for results
-    let isComplete = false;
-    while (!isComplete) {
-      const pollRes = await fetch(pollUrl);
-      const statusData = await pollRes.json();
-
-      if (statusData.runtimeStatus === 'Completed') {
-        // The actual return value is in statusData.output
-        renderResults(statusData.output, method, investment);
-        isComplete = true;
-      } else if (statusData.runtimeStatus === 'Failed' || statusData.runtimeStatus === 'Terminated') {
-        throw new Error("Background pipeline failed: " + (statusData.output || "Unknown error"));
-      } else {
-        // Wait 2.5 seconds before checking again
-        await new Promise(resolve => setTimeout(resolve, 2500));
-      }
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
     }
 
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    renderResults(data, method, investment);
+    
     document.getElementById('run-meta').style.display = 'block';
     document.getElementById('run-meta').textContent =
-      `Last run: ${new Date().toLocaleTimeString()} · Method: ${method}`;
+      `Last run: ${new Date().toLocaleTimeString()} · Method: ${method} · ${tickers.length} tickers`;
 
   } catch (err) {
     showError("Pipeline Error: " + err.message);
